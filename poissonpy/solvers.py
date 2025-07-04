@@ -246,3 +246,24 @@ class Poisson2DRegion:
         solution_grid[self.region_pos] = x
         solution_grid = solution_grid.reshape(self.Y, self.X)
         return solution_grid
+
+
+class Poisson2DRegionConstrained(Poisson2DRegion):
+
+    def __init__(self, region, interior, boundary, bounds=(-np.inf, np.inf), rect=None):
+        super().__init__(region, interior, boundary, rect=rect)
+        self.bounds = bounds
+
+    def solve(self):
+        res = scipy.optimize.lsq_linear(self.A, self.b, bounds=self.bounds, method='trf')
+
+        if not res.success:
+            print("Optimization failed. Use results with caution.")
+            print(res.message)
+
+        x = res.x
+
+        solution_grid = np.zeros(self.Y * self.X)
+        solution_grid[self.region_pos] = x
+        solution_grid = solution_grid.reshape(self.Y, self.X)
+        return solution_grid
