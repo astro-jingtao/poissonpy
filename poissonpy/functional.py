@@ -1,9 +1,8 @@
 import numpy as np
 
-import scipy.signal
-
 from sympy import lambdify, diff
 from sympy.abc import x, y
+from ait.conv import convolve, conv_cube_2d
 
 
 # Function related
@@ -19,6 +18,26 @@ def get_sp_derivative_expr(expr, var):
     return diff(expr, var, 1)
 
 
+def conv(arr, kernel, batch=False, boundary='reflect', padding=False):
+    if batch:
+        return conv_cube_2d(arr,
+                            kernel,
+                            method='fft',
+                            vel_axis=-1,
+                            pad=True,
+                            pad_boundary=boundary,
+                            normalize_kernel=False,
+                            nan_treatment='fill')
+    else:
+        return convolve(arr,
+                        kernel,
+                        method='fft',
+                        boundary=boundary,
+                        pad=padding,
+                        normalize_kernel=False,
+                        nan_treatment='fill')
+
+
 def get_np_gradient(arr,
                     dx=1,
                     dy=1,
@@ -27,48 +46,30 @@ def get_np_gradient(arr,
                     boundary='reflect',
                     padding=False):
 
-    if batch:
-        Gx_lst, Gy_lst = [], []
-        for k in range(arr.shape[-1]):
-            gx, gy = get_np_gradient(arr[..., k],
-                                     dx,
-                                     dy,
-                                     forward=forward,
-                                     boundary=boundary,
-                                     padding=padding)
-            Gx_lst.append(gx)
-            Gy_lst.append(gy)
-        return np.stack(Gx_lst, axis=-1), np.stack(Gy_lst, axis=-1)
-
-    if padding:
-        n_pad = 1
-
-        arr = np.pad(arr,
-                     pad_width=((n_pad, n_pad), (n_pad, n_pad)),
-                     mode=boundary)  # type: ignore
-
     if forward:
         kx = np.array([[0, 0, 0], [0, -1 / dx, 1 / dx], [0, 0, 0]])
         ky = np.array([[0, 0, 0], [0, -1 / dy, 0], [0, 1 / dy, 0]])
     else:
         kx = np.array([[0, 0, 0], [-1 / dx, 1 / dx, 0], [0, 0, 0]])
         ky = np.array([[0, -1 / dy, 0], [0, 1 / dy, 0], [0, 0, 0]])
-    Gx = scipy.signal.fftconvolve(arr, kx, mode="same")
-    Gy = scipy.signal.fftconvolve(arr, ky, mode="same")
 
-    if padding:
-        Gx = Gx[n_pad:-n_pad, n_pad:-n_pad]  # type: ignore
-        Gy = Gy[n_pad:-n_pad, n_pad:-n_pad]  # type: ignore
+    Gx = conv(arr, kx, boundary=boundary, padding=padding, batch=batch)
+    Gy = conv(arr, ky, boundary=boundary, padding=padding, batch=batch)
 
     return Gx, Gy
 
 
-def get_np_laplacian(arr, dx=1, dy=1):
+def get_np_laplacian(arr,
+                     dx=1,
+                     dy=1,
+                     batch=False,
+                     boundary='reflect',
+                     padding=False):
     kernel = np.array([[0, 1 / (dy**2), 0],
                        [1 / (dx**2), -2 / (dx**2) - 2 / (dy**2), 1 / (dx**2)],
                        [0, 1 / (dy**2), 0]])
-    laplacian = scipy.signal.fftconvolve(arr, kernel, mode="same")
-    return laplacian
+
+    return conv(arr, kernel, boundary=boundary, padding=padding, batch=batch)
 
 
 def get_np_div(gx, gy, dx=1, dy=1):
